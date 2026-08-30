@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个人任务管理</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --border: #d9dce1;
+    --text: #24292f;
+    --muted: #6a737d;
+    --accent: #1f6feb;
+    --danger: #cf222e;
+    --ok: #1a7f37;
+    --warn: #9a6700;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 16px; margin: 0; }
+  .badge { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--muted); color: var(--muted); }
+  .badge.server { color: var(--ok); border-color: var(--ok); }
+  .badge.readonly { color: var(--warn); border-color: var(--warn); }
+  .bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 4px 14px; font-size: 14px; cursor: pointer;
+    background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted);
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .bar .grow { flex: 1; }
+  button, select, input, textarea {
+    font: inherit; color: inherit; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px;
+  }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  input[type="search"] { width: 180px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); table-layout: fixed; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  th { background: #fafbfc; color: var(--muted); font-weight: 600; font-size: 13px; }
+  td.title-cell { white-space: nowrap; }
+  td.preview-cell { color: var(--muted); font-size: 12px; }
+  td.preview-cell .line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td.preview-cell .line.notes { color: var(--ok); }
+  td.dt { color: var(--muted); font-size: 12px; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #f6f8fa; }
+  tbody tr.disabled-row, tbody tr.disabled-row:hover { cursor: default; background: none; }
+  .empty { text-align: center; color: var(--muted); padding: 24px 0; }
+  .st { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid; }
+  .st-todo { color: var(--muted); border-color: var(--border); }
+  .st-doing { color: var(--accent); border-color: var(--accent); }
+  .st-review { color: var(--warn); border-color: var(--warn); }
+  .st-done { color: var(--ok); border-color: var(--ok); }
+  .st-cancel { color: var(--muted); border-color: var(--muted); text-decoration: line-through; }
+  .st-overdue { color: #fff; background: var(--danger); border-color: var(--danger); }
+  .pg { position: relative; height: 14px; background: #eaeef2; border-radius: 7px; overflow: hidden; }
+  .pg-bar { height: 100%; background: var(--accent); border-radius: 7px; }
+  .pg.done .pg-bar { background: var(--ok); }
+  .pg.review .pg-bar { background: var(--warn); }
+  .pg span { position: absolute; inset: 0; text-align: center; font-size: 11px; line-height: 14px; }
+  .hint { padding: 6px 16px; font-size: 12px; color: var(--warn); background: #fff8c6; border-bottom: 1px solid var(--border); display: none; }
+  .fatal { margin: 40px auto; max-width: 480px; padding: 16px; border: 1px solid var(--danger); color: var(--danger); background: var(--panel); display: none; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(36, 41, 47, 0.4);
+    display: none; justify-content: flex-end;
+  }
+  .overlay.open { display: flex; }
+  /* 编辑抽屉不占满拦截,左侧列表在编辑中仍可点选切换 */
+  #formOverlay { background: none; pointer-events: none; }
+  #formOverlay .modal { pointer-events: auto; }
+  .modal {
+    width: 480px; max-width: 92vw; height: 100%; background: var(--panel);
+    border-left: 1px solid var(--border); overflow-y: auto;
+    display: flex; flex-direction: column;
+    transform: translateX(24px); opacity: 0; transition: transform .18s ease, opacity .18s ease;
+  }
+  .overlay.open .modal { transform: none; opacity: 1; }
+  .modal h2 { font-size: 15px; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .modal h2.form-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .modal h2 .head-actions { display: flex; align-items: center; gap: 6px; }
+  .modal h2 .h2btn { font-size: 12px; padding: 2px 10px; }
+  button.start { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .modal .body { padding: 12px 14px; display: grid; grid-template-columns: 80px 1fr; gap: 8px 10px; align-items: center; }
+  .modal .body label { color: var(--muted); text-align: right; }
+  .modal .body .full { grid-column: 1 / -1; }
+  .modal textarea { width: 100%; height: 120px; resize: vertical; }
+  .modal .foot { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--border); margin-top: auto; }
+  .req::after { content: " *"; color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>个人任务管理</h1>
+  <span id="modeBadge" class="badge">检测中…</span>
+</header>
+
+<div id="readonlyHint" class="hint"></div>
+
+<div class="bar">
+  <button id="tabTask" class="tab active" type="button">任务</button>
+  <button id="tabBug" class="tab" type="button">缺陷</button>
+  <button id="tabReview" class="tab" type="button">待审核</button>
+  <button id="tabDone" class="tab" type="button">已完成</button>
+  <span class="grow"></span>
+  <button id="btnNew" class="primary" type="button">新建</button>
+  <select id="filterType">
+    <option value="">所有类型</option>
+    <option value="task">任务</option>
+    <option value="bug">缺陷</option>
+  </select>
+  <select id="filterPriority">
+    <option value="">全部优先级</option>
+    <option>必须做</option><option>应该做</option><option>可不做</option>
+  </select>
+  <select id="filterStatus">
+    <option value="active" selected>未完成(默认)</option>
+    <option value="">全部</option>
+    <option>未开始</option><option>进行中</option><option>已完成</option><option>已取消</option><option>待审核</option>
+  </select>
+  <input id="searchBox" type="search" placeholder="搜索标题…">
+  <select id="filterDate" style="display:none">
+    <option value="today">今天完成</option>
+    <option value="yesterday">昨天完成</option>
+    <option value="specific">指定日期</option>
+    <option value="range">日期范围</option>
+    <option value="">全部</option>
+  </select>
+  <input id="filterDateSpecific" type="date" style="display:none">
+  <input id="filterDateStart" type="date" style="display:none">
+  <span id="filterDateSep" style="display:none;color:var(--muted)">至</span>
+  <input id="filterDateEnd" type="date" style="display:none">
+</div>
+
+<table>
+  <colgroup id="colgroup">
+    <col style="width:4%"><col style="width:17%"><col style="width:23%"><col style="width:7%"><col style="width:9%">
+    <col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:6%">
+  </colgroup>
+  <thead id="thead">
+    <tr>
+      <th>#</th><th>标题</th><th>内容</th><th>优先级</th><th>状态</th><th>进度</th>
+      <th>计划开始</th><th>计划结束</th><th>工时(h)</th><th>提出人</th>
+    </tr>
+  </thead>
+  <tbody id="rows"><tr><td class="empty" colspan="10">加载中…</td></tr></tbody>
+</table>
+
+<div id="fatalBox" class="fatal"></div>
+
+<!-- 新建 / 编辑弹窗 -->
+<div id="formOverlay" class="overlay">
+  <div class="modal">
+    <h2 class="form-head">
+      <span id="formTitle">新建</span>
+      <span class="head-actions">
+        <button id="btnFormClose" class="h2btn" type="button">关闭</button>
+        <button id="btnDeleteTask" class="danger h2btn" type="button">删除</button>
+      </span>
+    </h2>
+    <div class="body">
+      <label>类型</label>
+      <select id="fType"><option value="task">任务</option><option value="bug">缺陷</option></select>
+      <label class="req">标题</label>
+      <input id="fTitle" type="text">
+      <label>详情</label>
+      <textarea id="fDetail"></textarea>
+      <label>提出人</label>
+      <input id="fReporter" type="text">
+      <label>状态</label>
+      <select id="fStatus">
+        <option>未开始</option><option>进行中</option><option>待审核</option><option>已取消</option>
+      </select>
+      <label>优先级</label>
+      <select id="fPriority">
+        <option>必须做</option><option selected>应该做</option><option>可不做</option>
+      </select>
+      <label>进度%</label>
+      <input id="fProgress" type="number" min="0" max="100" step="5" value="0">
+      <label>计划开始</label>
+      <input id="fPlanStart" type="date">
+      <label>计划结束(DDL)</label>
+      <input id="fDue" type="date">
+      <label>预估工时</label>
+      <input id="fEst" type="number" step="0.5" min="0" value="0">
+      <label>实际工时</label>
+      <input id="fActual" type="number" step="0.1" min="0" value="0">
+      <label>实际开始</label>
+      <input id="fStart" type="text" disabled placeholder="状态推进为「进行中」时自动记录">
+      <label>实际结束</label>
+      <input id="fEnd" type="text" disabled placeholder="关单时自动记录">
+      <label>验证说明</label>
+      <textarea id="fTestNotes" placeholder="关单时填写,可回看/修改"></textarea>
+      <label>审核结果</label>
+      <textarea id="fReviewNotes" placeholder="审核通过/打回时填写" disabled></textarea>
+    </div>
+    <div class="foot">
+      <button id="btnStartTask" class="start" type="button" style="margin-right:auto">启动</button>
+      <button id="btnCloseTask" class="danger" type="button" style="margin-right:auto">关单…</button>
+      <button id="btnApproveTask" class="start" type="button">通过</button>
+      <button id="btnRejectTask" class="danger" type="button">打回</button>
+      <button id="btnFormCancel" type="button">取消</button>
+      <button id="btnFormSave" class="primary" type="button">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 关单弹窗 -->
+<div id="closeOverlay" class="overlay">
+  <div class="modal">
+    <h2>关单(进入待审核):<span id="closeTaskTitle"></span></h2>
+    <div class="body">
+      <label class="req">验证说明</label>
+      <textarea id="closeNotes" placeholder="验证方式与结果(必填)"></textarea>
+      <label>实际工时</label>
+      <input id="closeHours" type="number" step="0.1" min="0">
+    </div>
+    <div class="foot">
+      <button id="btnCloseCancel" type="button">取消</button>
+      <button id="btnCloseSave" class="primary" type="button">确认完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- 审核弹窗 -->
+<div id="reviewOverlay" class="overlay">
+  <div class="modal">
+    <h2><span id="reviewActionLabel">审核:</span><span id="reviewTaskTitle"></span></h2>
+    <div class="body">
+      <label>审核结果</label>
+      <textarea id="reviewNotes" placeholder="填写审核结果或拒绝原因(可选)"></textarea>
+    </div>
+    <div class="foot">
+      <button id="btnReviewCancel" type="button">取消</button>
+      <button id="btnReviewApprove" class="start" type="button">通过</button>
+      <button id="btnReviewReject" class="danger" type="button">打回</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const STATUS_CLASS = { "未开始": "st-todo", "进行中": "st-doing", "已完成": "st-done", "已取消": "st-cancel", "待审核": "st-review" };
+const state = { mode: null, type: "task", tab: "task", tasks: [], editingId: null };
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtH = (v) => Number(v || 0).toFixed(1);
+const isOverdue = (t) => !!t.due_date && t.due_date < new Date().toLocaleDateString("sv-SE") &&
+  t.status !== "已完成" && t.status !== "已取消" && t.status !== "待审核";
+
+function todayStr() {
+  return new Date().toLocaleDateString("sv-SE");
+}
+function yesterdayStr() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toLocaleDateString("sv-SE");
+}
+function toDateStr(s) {
+  return s || "";
+}
+
+async function api(path, options) {
+  const res = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, options));
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("请求失败:" + res.status));
+  return data;
+}
+
+/* ---- 快照加载:先 fetch(http 场景),失败则用 <script> 标签(file:// 场景) ---- */
+function loadSnapshot() {
+  return fetch("snapshot.json")
+    .then((r) => r.text())
+    .then((text) => JSON.parse(text.replace(/^window\.TODO_SNAPSHOT\s*=\s*/, "").replace(/;\s*$/, "")))
+    .catch(() => new Promise((resolve) => {
+      const tag = document.createElement("script");
+      tag.src = "snapshot.json";
+      tag.onload = () => resolve(window.TODO_SNAPSHOT || null);
+      tag.onerror = () => resolve(null);
+      document.head.appendChild(tag);
+    }));
+}
+
+async function init() {
+  // 初始化时更新表格列和筛选器显示状态
+  updateTableColumns(state.tab === "review");
+  $("filterType").style.display = state.tab === "review" ? "" : "none";
+  $("filterStatus").style.display = (state.tab === "review" || state.tab === "done") ? "none" : "";
+  updateDateFilterVisibility();
+  
+  try {
+    let params;
+    if (state.tab === "review") {
+      params = "status=待审核";
+    } else if (state.tab === "done") {
+      params = "status=已完成";
+    } else {
+      params = "type=" + state.type;
+    }
+    const tasks = await api("/api/tasks?" + params, { signal: AbortSignal.timeout(2000) });
+    state.mode = "server";
+    $("modeBadge").textContent = "服务模式";
+    $("modeBadge").className = "badge server";
+    state.tasks = tasks;
+  } catch (err) {
+    const snap = await loadSnapshot();
+    if (!snap) {
+      $("modeBadge").textContent = "不可用";
+      $("fatalBox").style.display = "block";
+      $("fatalBox").textContent = "无法连接服务,也未找到 snapshot.json。请先在 todo-app 目录执行 ./task.sh start。";
+      render();
+      return;
+    }
+    state.mode = "readonly";
+    if (state.tab === "review") {
+      state.tasks = snap.tasks.filter((t) => t.status === "待审核");
+    } else if (state.tab === "done") {
+      state.tasks = snap.tasks.filter((t) => t.status === "已完成");
+    } else {
+      state.tasks = snap.tasks.filter((t) => t.type === state.type);
+    }
+    $("modeBadge").textContent = "只读模式";
+    $("modeBadge").className = "badge readonly";
+    $("btnNew").disabled = true;
+    $("readonlyHint").style.display = "block";
+    $("readonlyHint").textContent =
+      "只读模式:数据来自 snapshot.json(导出于 " + (snap.exported_at || "未知时间") +
+      "),启动服务后可编辑。";
+  }
+  render();
+}
+
+function matchStatus(t, st) {
+  if (st === "active") return t.status === "未开始" || t.status === "进行中";
+  return !st || t.status === st;
+}
+
+function updateDateFilterVisibility() {
+  const isDone = state.tab === "done";
+  $("filterDate").style.display = isDone ? "" : "none";
+  if (!isDone) {
+    $("filterDateSpecific").style.display = "none";
+    $("filterDateStart").style.display = "none";
+    $("filterDateSep").style.display = "none";
+    $("filterDateEnd").style.display = "none";
+    return;
+  }
+  const mode = $("filterDate").value;
+  $("filterDateSpecific").style.display = mode === "specific" ? "" : "none";
+  $("filterDateStart").style.display = mode === "range" ? "" : "none";
+  $("filterDateSep").style.display = mode === "range" ? "" : "none";
+  $("filterDateEnd").style.display = mode === "range" ? "" : "none";
+}
+
+function matchDateFilter(t) {
+  if (state.tab !== "done") return true;
+  const mode = $("filterDate").value;
+  if (!mode) return true;
+  const end = toDateStr(t.end_time);
+  if (!end) return false;
+  const endDay = end.slice(0, 10);
+  if (mode === "today") return endDay === todayStr();
+  if (mode === "yesterday") return endDay === yesterdayStr();
+  if (mode === "specific") {
+    const pick = $("filterDateSpecific").value;
+    return pick && endDay === pick;
+  }
+  if (mode === "range") {
+    const s = $("filterDateStart").value;
+    const e = $("filterDateEnd").value;
+    if (s && endDay < s) return false;
+    if (e && endDay > e) return false;
+    return true;
+  }
+  return true;
+}
+
+function clientFilter(list) {
+  const pr = $("filterPriority").value;
+  const kw = $("searchBox").value.trim();
+  
+  // 待审核TAB：只应用优先级和搜索筛选
+  if (state.tab === "review") {
+    return list.filter((t) =>
+      (!pr || t.priority === pr) && (!kw || t.title.includes(kw) || String(t.id) === kw));
+  }
+  
+  // 已完成TAB：应用日期、优先级和搜索筛选
+  if (state.tab === "done") {
+    return list.filter((t) =>
+      matchDateFilter(t) && (!pr || t.priority === pr) && (!kw || t.title.includes(kw) || String(t.id) === kw));
+  }
+  
+  // 其他TAB：应用状态、优先级和搜索筛选
+  const st = $("filterStatus").value;
+  return list.filter((t) =>
+    matchStatus(t, st) && (!pr || t.priority === pr) && (!kw || t.title.includes(kw) || String(t.id) === kw));
+}
+
+async function refresh() {
+  if (state.mode !== "server") { render(); return; }
+  const params = new URLSearchParams({
+    q: $("searchBox").value.trim(),
+  });
+  if (state.tab === "review") {
+    params.set("status", "待审核");
+    // 待审核TAB添加类型筛选
+    const typeFilter = $("filterType").value;
+    if (typeFilter) {
+      params.set("type", typeFilter);
+    }
+  } else if (state.tab === "done") {
+    params.set("status", "已完成");
+  } else {
+    params.set("type", state.type);
+  }
+  api("/api/tasks?" + params).then((tasks) => {
+    state.tasks = tasks;
+    render();
+  }).catch((err) => alert(err.message));
+}
+
+function render() {
+  const list = clientFilter(state.tasks);
+  const isReviewTab = state.tab === "review";
+  const colspan = isReviewTab ? 11 : 10;
+  if (!list.length) {
+    $("rows").innerHTML = '<tr><td class="empty" colspan="' + colspan + '">暂无数据</td></tr>';
+    return;
+  }
+  $("rows").innerHTML = list.map((t) => {
+    const overdue = isOverdue(t);
+    const stCell = overdue
+      ? '<span class="st st-overdue">已超期</span>'
+      : '<span class="st ' + STATUS_CLASS[t.status] + '">' + esc(t.status) + "</span>";
+    const firstLine = (t.detail || "").split("\n").map(s => s.trim()).find(Boolean) || "";
+    const notesLine = (t.test_notes || "").split("\n").map(s => s.trim()).find(Boolean) || "";
+    const lines = [];
+    if (firstLine) lines.push('<div class="line">' + esc(firstLine.slice(0, 120)) + "</div>");
+    if (notesLine) lines.push('<div class="line notes">验证:' + esc(notesLine.slice(0, 120)) + "</div>");
+    const previewCell = lines.length
+      ? '<td class="preview-cell">' + lines.join("") + "</td>"
+      : "<td>—</td>";
+    const pct = Math.max(0, Math.min(100, Number(t.progress || 0)));
+    const pgCls = t.status === "已完成" ? " done" : t.status === "待审核" ? " review" : "";
+    const progCell = '<td><div class="pg' + pgCls + '">'
+      + '<div class="pg-bar" style="width:' + pct + '%"></div><span>' + pct + "%</span></div></td>";
+    const typeCell = isReviewTab
+      ? "<td>" + esc(t.type === "task" ? "任务" : "缺陷") + "</td>"
+      : "";
+    return "<tr data-id=\"" + t.id + "\">"
+      + "<td>" + t.id + "</td>"
+      + typeCell
+      + "<td class=\"title-cell\">" + esc(t.title) + "</td>"
+      + previewCell
+      + "<td>" + esc(t.priority) + "</td>"
+      + "<td>" + stCell + "</td>"
+      + progCell
+      + '<td class="dt">' + (esc(t.plan_start) || "—") + "</td>"
+      + '<td class="dt">' + (esc(t.due_date) || "—") + "</td>"
+      + "<td>" + fmtH(t.est_hours) + "</td>"
+      + "<td>" + (esc(t.reporter) || "—") + "</td></tr>";
+  }).join("");
+}
+
+function showEditingTask(id) {
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return false;
+  openEdit(task);
+  return true;
+}
+
+/* ---- 弹窗:新建 / 编辑 ---- */
+/* 状态下拉:「已完成」只在编辑已完成的任务时出现,完成动作必须走关单弹窗 */
+function fillStatusOptions(current) {
+  const opts = ["未开始", "进行中"];
+  if (current === "已完成") opts.push("已完成");
+  if (current === "待审核") opts.push("待审核");
+  opts.push("已取消");
+  $("fStatus").innerHTML = opts.map((s) => "<option>" + s + "</option>").join("");
+  $("fStatus").value = current;
+}
+
+function openCreate() {
+  state.editingId = null;
+  $("formTitle").textContent = state.type === "task" ? "新建任务" : "新建缺陷";
+  $("fType").value = state.type;
+  $("fTitle").value = ""; $("fDetail").value = ""; $("fReporter").value = ""; $("fTestNotes").value = "";
+  $("fReviewNotes").value = "";
+  fillStatusOptions("未开始"); $("fPriority").value = "应该做"; $("fProgress").value = "0";
+  $("fDue").value = ""; $("fEst").value = "0"; $("fPlanStart").value = "";
+  $("fStart").value = ""; $("fEnd").value = ""; $("fActual").value = "0";
+  $("btnCloseTask").style.display = "none";
+  $("btnStartTask").style.display = "none";
+  $("btnApproveTask").style.display = "none";
+  $("btnRejectTask").style.display = "none";
+  $("btnDeleteTask").style.display = "none";
+  $("formOverlay").classList.add("open");
+}
+
+function openEdit(task) {
+  state.editingId = task.id;
+  $("formTitle").textContent = "编辑 #" + task.id;
+  $("fType").value = task.type; $("fTitle").value = task.title;
+  $("fDetail").value = task.detail; $("fReporter").value = task.reporter;
+  $("fTestNotes").value = task.test_notes || "";
+  fillStatusOptions(task.status);
+  $("fPriority").value = task.priority;
+  $("fProgress").value = task.progress ?? 0;
+  $("fDue").value = task.due_date || ""; $("fEst").value = task.est_hours;
+  $("fPlanStart").value = task.plan_start || "";
+  const toLocal = (s) => (s ? s.slice(0, 16) : "");
+  $("fStart").value = toLocal(task.start_time);
+  $("fEnd").value = toLocal(task.end_time);
+  $("fActual").value = task.actual_hours || 0;
+  $("fReviewNotes").value = task.review_notes || "";
+  /* 关单只属于「进行中」;未开始显示「启动」;删除对已有单始终可用 */
+  $("btnCloseTask").style.display = task.status === "进行中" ? "" : "none";
+  $("btnStartTask").style.display = task.status === "未开始" ? "" : "none";
+  $("btnApproveTask").style.display = task.status === "待审核" ? "" : "none";
+  $("btnRejectTask").style.display = task.status === "待审核" ? "" : "none";
+  $("btnDeleteTask").style.display = "";
+  $("formOverlay").classList.add("open");
+}
+
+function formPayload() {
+  const title = $("fTitle").value.trim();
+  if (!title) { alert("标题不能为空"); return null; }
+  return {
+    type: $("fType").value, title: title, detail: $("fDetail").value,
+    reporter: $("fReporter").value, status: $("fStatus").value,
+    priority: $("fPriority").value, due_date: $("fDue").value,
+    progress: Number($("fProgress").value || 0),
+    plan_start: $("fPlanStart").value,
+    est_hours: Number($("fEst").value || 0),
+    actual_hours: Number($("fActual").value || 0),
+    test_notes: $("fTestNotes").value,
+    review_notes: $("fReviewNotes").value,
+  };
+}
+
+async function saveForm() {
+  const creating = state.editingId === null;
+  const payload = formPayload();
+  if (!payload) return;
+  try {
+    let taskId = state.editingId;
+    if (creating) {
+      const result = await api("/api/tasks", { method: "POST", body: JSON.stringify(payload) });
+      taskId = result.id;
+      $("formOverlay").classList.remove("open");
+    } else {
+      await api("/api/tasks/" + state.editingId, { method: "PUT", body: JSON.stringify(payload) });
+    }
+    await refresh();
+    if (!creating) showEditingTask(taskId);
+  } catch (err) { alert(err.message); }
+}
+
+/* ---- 弹窗:关单 ---- */
+let closingTask = null;
+
+function openClose(task) {
+  closingTask = task;
+  $("closeTaskTitle").textContent = "#" + task.id + " " + task.title;
+  $("closeNotes").value = "";
+  let suggested = "";
+  if (task.start_time) {
+    const startMs = Date.parse(task.start_time.replace(" ", "T"));
+    suggested = (Math.round((Date.now() - startMs) / 360000) / 10).toFixed(1);
+  }
+  $("closeHours").value = suggested;
+  $("formOverlay").classList.remove("open");
+  $("closeOverlay").classList.add("open");
+}
+
+async function submitClose() {
+  const notes = $("closeNotes").value.trim();
+  if (!notes) { alert("验证说明必填,不能为空"); return; }
+  const body = { test_notes: notes };
+  if ($("closeHours").value !== "") body.actual_hours = Number($("closeHours").value);
+  try {
+    await api("/api/tasks/" + closingTask.id + "/close", { method: "POST", body: JSON.stringify(body) });
+    $("closeOverlay").classList.remove("open");
+    refresh();
+  } catch (err) { alert(err.message); }
+}
+
+/* ---- 事件绑定 ---- */
+$("tabTask").onclick = () => switchTab("task");
+$("tabBug").onclick = () => switchTab("bug");
+$("tabReview").onclick = () => switchTab("review");
+$("tabDone").onclick = () => switchTab("done");
+function switchTab(type) {
+  if (state.tab === type) return;
+  state.tab = type;
+  state.type = (type === "review" || type === "done") ? state.type : type;
+  $("tabTask").classList.toggle("active", type === "task");
+  $("tabBug").classList.toggle("active", type === "bug");
+  $("tabReview").classList.toggle("active", type === "review");
+  $("tabDone").classList.toggle("active", type === "done");
+  $("btnNew").style.display = (type === "review" || type === "done") ? "none" : "";
+  
+  // 待审核/已完成TAB隐藏状态筛选，待审核TAB显示类型筛选
+  $("filterStatus").style.display = (type === "review" || type === "done") ? "none" : "";
+  $("filterType").style.display = type === "review" ? "" : "none";
+  updateDateFilterVisibility();
+  
+  // 更新表格列（待审核TAB添加类型列）
+  updateTableColumns(type === "review");
+  
+  if (state.editingId === null) {
+    $("formOverlay").classList.remove("open");
+  }
+  refresh();
+}
+
+function updateTableColumns(isReviewTab) {
+  const colgroup = $("colgroup");
+  const thead = $("thead");
+  
+  if (isReviewTab) {
+    // 待审核TAB：添加类型列
+    colgroup.innerHTML = `
+      <col style="width:4%"><col style="width:6%"><col style="width:15%"><col style="width:20%"><col style="width:7%"><col style="width:8%">
+      <col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:6%">
+    `;
+    thead.innerHTML = `
+      <tr>
+        <th>#</th><th>类型</th><th>标题</th><th>内容</th><th>优先级</th><th>状态</th><th>进度</th>
+        <th>计划开始</th><th>计划结束</th><th>工时(h)</th><th>提出人</th>
+      </tr>
+    `;
+  } else {
+    // 任务/缺陷TAB：原始列
+    colgroup.innerHTML = `
+      <col style="width:4%"><col style="width:17%"><col style="width:23%"><col style="width:7%"><col style="width:9%">
+      <col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:6%">
+    `;
+    thead.innerHTML = `
+      <tr>
+        <th>#</th><th>标题</th><th>内容</th><th>优先级</th><th>状态</th><th>进度</th>
+        <th>计划开始</th><th>计划结束</th><th>工时(h)</th><th>提出人</th>
+      </tr>
+    `;
+  }
+}
+$("btnNew").onclick = () => { if (state.mode === "server") openCreate(); };
+$("filterStatus").onchange = refresh;
+$("filterPriority").onchange = refresh;
+$("filterType").onchange = refresh;
+$("filterDate").onchange = () => { updateDateFilterVisibility(); refresh(); };
+$("filterDateSpecific").onchange = refresh;
+$("filterDateStart").onchange = refresh;
+$("filterDateEnd").onchange = refresh;
+$("searchBox").addEventListener("keydown", (e) => { if (e.key === "Enter") refresh(); });
+$("searchBox").addEventListener("search", refresh);
+$("rows").onclick = (e) => {
+  if (state.mode !== "server") return;
+  const tr = e.target.closest("tr[data-id]");
+  if (!tr) return;
+  const task = state.tasks.find((t) => t.id === Number(tr.dataset.id));
+  if (task) openEdit(task);
+};
+$("btnFormCancel").onclick = () => $("formOverlay").classList.remove("open");
+$("btnFormClose").onclick = () => $("formOverlay").classList.remove("open");
+$("btnFormSave").onclick = saveForm;
+$("btnCloseTask").onclick = () => {
+  const task = state.tasks.find((t) => t.id === state.editingId);
+  if (task) openClose(task);
+};
+$("btnStartTask").onclick = async () => {
+  if (state.editingId === null) return;
+  try {
+    await api("/api/tasks/" + state.editingId, { method: "PUT", body: JSON.stringify({ status: "进行中" }) });
+    $("formOverlay").classList.remove("open");
+    refresh();
+  } catch (err) { alert(err.message); }
+};
+$("btnDeleteTask").onclick = async () => {
+  if (state.editingId === null || !confirm("确认物理删除 #" + state.editingId + "?不可恢复")) return;
+  try {
+    await api("/api/tasks/" + state.editingId, { method: "DELETE" });
+    $("formOverlay").classList.remove("open");
+    refresh();
+  } catch (err) { alert(err.message); }
+};
+
+let reviewingTaskId = null;
+
+function openReview(task, action) {
+  reviewingTaskId = task.id;
+  $("reviewTaskTitle").textContent = "#" + task.id + " " + task.title;
+  $("reviewNotes").value = "";
+  $("reviewActionLabel").textContent = action === "approve" ? "通过:" : "打回:";
+  $("formOverlay").classList.remove("open");
+  $("reviewOverlay").classList.add("open");
+}
+
+async function submitReview(action) {
+  if (reviewingTaskId === null || !action) return;
+  const taskId = reviewingTaskId;
+  reviewingTaskId = null;
+  try {
+    await api("/api/tasks/" + taskId + "/review", {
+      method: "POST",
+      body: JSON.stringify({
+        action: action,
+        review_notes: $("reviewNotes").value.trim()
+      }),
+    });
+    $("reviewOverlay").classList.remove("open");
+    $("formOverlay").classList.remove("open");
+    state.editingId = null;
+    refresh();
+  } catch (err) { alert(err.message); }
+}
+
+$("btnApproveTask").onclick = () => {
+  const task = state.tasks.find((t) => t.id === state.editingId);
+  if (task) openReview(task, "approve");
+};
+$("btnRejectTask").onclick = () => {
+  const task = state.tasks.find((t) => t.id === state.editingId);
+  if (task) openReview(task, "reject");
+};
+$("btnReviewCancel").onclick = () => $("reviewOverlay").classList.remove("open");
+$("btnReviewApprove").onclick = () => submitReview("approve");
+$("btnReviewReject").onclick = () => submitReview("reject");
+
+$("btnCloseCancel").onclick = () => $("closeOverlay").classList.remove("open");
+$("btnCloseSave").onclick = submitClose;
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  $("formOverlay").classList.remove("open");
+  $("closeOverlay").classList.remove("open");
+  $("reviewOverlay").classList.remove("open");
+});
+
+init();
+</script>
+</body>
+</html>

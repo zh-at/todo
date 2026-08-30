@@ -1,0 +1,19 @@
+# Python缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# SQLite数据库
+*.db
+app.db
+
+# 快照文件
+snapshot.json
+
+# PID文件
+*.pid
+server.pid
+
+# 环境文件
+.env
+.venv/

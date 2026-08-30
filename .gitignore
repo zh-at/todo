@@ -17,3 +17,6 @@ server.pid
 # 环境文件
 .env
 .venv/
+
+# 本地工具索引
+.codegraph

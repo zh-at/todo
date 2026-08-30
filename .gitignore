@@ -18,5 +18,8 @@ server.pid
 .env
 .venv/
 
-# 本地工具索引
+# 本地工具索引/配置
 .codegraph
+.claude
+.omo
+.codex

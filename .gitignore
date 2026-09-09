@@ -10,9 +10,13 @@ app.db
 # 快照文件
 snapshot.json
 
-# PID文件
+# PID和端口文件
 *.pid
 server.pid
+.port
+
+# 历史归档
+archive/
 
 # 环境文件
 .env

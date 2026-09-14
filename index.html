@@ -83,7 +83,7 @@
   .overlay.open { display: flex; }
   /* 编辑抽屉不占满拦截,左侧列表在编辑中仍可点选切换 */
   #formOverlay { background: none; pointer-events: none; }
-  #formOverlay .modal { pointer-events: auto; }
+  #formOverlay .modal { width: 640px; pointer-events: auto; }
   .modal {
     width: 480px; max-width: 92vw; height: 100%; background: var(--panel);
     border-left: 1px solid var(--border); overflow-y: auto;
@@ -209,6 +209,8 @@
       <input id="fEst" type="number" step="0.5" min="0" value="0">
       <label>实际工时</label>
       <input id="fActual" type="number" step="0.1" min="0" value="0">
+      <label id="fCreatedLabel">创建时间</label>
+      <input id="fCreated" type="text" readonly>
       <label>实际开始</label>
       <input id="fStart" type="text" disabled placeholder="状态推进为「进行中」时自动记录">
       <label>实际结束</label>
@@ -603,6 +605,7 @@ function openCreate() {
   fillStatusOptions("未开始"); $("fPriority").value = "应该做"; $("fProgress").value = "0";
   $("fDue").value = ""; $("fEst").value = "0"; $("fPlanStart").value = "";
   $("fStart").value = ""; $("fEnd").value = ""; $("fActual").value = "0";
+  $("fCreatedLabel").style.display = "none"; $("fCreated").style.display = "none"; $("fCreated").value = "";
   $("btnCloseTask").style.display = "none";
   $("btnStartTask").style.display = "none";
   $("btnApproveTask").style.display = "none";
@@ -633,6 +636,8 @@ function openEdit(task) {
   $("fDue").value = task.due_date || ""; $("fEst").value = task.est_hours;
   $("fPlanStart").value = task.plan_start || "";
   const toLocal = (s) => (s ? s.slice(0, 16) : "");
+  $("fCreatedLabel").style.display = ""; $("fCreated").style.display = "";
+  $("fCreated").value = toLocal(task.created_at);
   $("fStart").value = toLocal(task.start_time);
   $("fEnd").value = toLocal(task.end_time);
   $("fActual").value = task.actual_hours || 0;

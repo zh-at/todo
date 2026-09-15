@@ -353,11 +353,9 @@ function projectMode(name) {
   return p ? p.mode : "活跃";
 }
 
-/* 「全部项目」视图降噪:维护/归档项目的已完结任务默认不显示 */
-function isDeNoise(t) {
-  if ($("filterProject").value) return false;
-  const mode = projectMode(t.project);
-  return mode !== "活跃" && (t.status === "已完成" || t.status === "已取消");
+function sortByProjectMode(list) {
+  const order = { "活跃": 0, "维护": 1, "归档": 2 };
+  return list.slice().sort((a, b) => order[projectMode(a.project)] - order[projectMode(b.project)]);
 }
 
 async function init() {
@@ -461,24 +459,23 @@ function matchDateFilter(t) {
 function clientFilter(list) {
   const pr = $("filterPriority").value;
   const kw = $("searchBox").value.trim();
-  const proj = $("filterProject").value;
+  let filtered;
 
   // 待审核TAB：只应用优先级和搜索筛选
   if (state.tab === "review") {
-    return list.filter((t) =>
-      !isDeNoise(t) && (!pr || t.priority === pr) && (!kw || t.title.includes(kw) || String(t.id) === kw));
+    filtered = list.filter((t) =>
+      (!pr || t.priority === pr) && (!kw || t.title.includes(kw) || String(t.id) === kw));
+  } else if (state.tab === "done") {
+    // 已完成TAB：应用日期、优先级和搜索筛选
+    filtered = list.filter((t) =>
+      matchDateFilter(t) && (!pr || t.priority === pr) && (!kw || t.title.includes(kw) || String(t.id) === kw));
+  } else {
+    // 其他TAB：应用状态、优先级和搜索筛选
+    const st = $("filterStatus").value;
+    filtered = list.filter((t) =>
+      matchStatus(t, st) && (!pr || t.priority === pr) && (!kw || t.title.includes(kw) || String(t.id) === kw));
   }
-
-  // 已完成TAB：应用日期、优先级和搜索筛选
-  if (state.tab === "done") {
-    return list.filter((t) =>
-      !isDeNoise(t) && matchDateFilter(t) && (!pr || t.priority === pr) && (!kw || t.title.includes(kw) || String(t.id) === kw));
-  }
-
-  // 其他TAB：应用状态、优先级和搜索筛选
-  const st = $("filterStatus").value;
-  return list.filter((t) =>
-    !isDeNoise(t) && matchStatus(t, st) && (!pr || t.priority === pr) && (!kw || t.title.includes(kw) || String(t.id) === kw));
+  return sortByProjectMode(filtered);
 }
 
 async function refresh() {

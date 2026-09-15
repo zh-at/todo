@@ -509,6 +509,7 @@ async function refresh() {
 function render() {
   const list = clientFilter(state.tasks);
   const isReviewTab = state.tab === "review";
+  const isDoneTab = state.tab === "done";
   if (!list.length) {
     $("rows").innerHTML = '<tr><td class="empty" colspan="' + state.colCount + '">暂无数据</td></tr>';
     return;
@@ -534,6 +535,9 @@ function render() {
     const typeCell = isReviewTab
       ? "<td>" + esc(t.type === "task" ? "任务" : "缺陷") + "</td>"
       : "";
+    const completedDateCell = isDoneTab
+      ? '<td class="dt" title="' + esc(t.end_time) + '">' + (esc((t.end_time || "").slice(0, 10)) || "—") + "</td>"
+      : "";
     const projCell = showProject
       ? '<td class="proj-cell">' + esc(t.project) + "</td>"
       : "";
@@ -548,14 +552,16 @@ function render() {
       + progCell
       + '<td class="dt">' + (esc(t.plan_start) || "—") + "</td>"
       + '<td class="dt">' + (esc(t.due_date) || "—") + "</td>"
+      + completedDateCell
       + "<td>" + fmtH(t.est_hours) + "</td>"
       + "<td>" + (esc(t.reporter) || "—") + "</td></tr>";
   }).join("");
 }
 
-/* ---- 表格列:# [类型] [项目] 标题 内容 优先级 状态 进度 计划开始 计划结束 工时 提出人 ---- */
+/* ---- 表格列:# [类型] [项目] 标题 内容 优先级 状态 进度 计划开始 计划结束 [完成日期] 工时 提出人 ---- */
 function updateTableColumns() {
   const isReviewTab = state.tab === "review";
+  const isDoneTab = state.tab === "done";
   const showProject = !$("filterProject").value;
   const cols = [{ w: 4, label: "#" }];
   if (isReviewTab) cols.push({ w: 6, label: "类型" });
@@ -563,7 +569,9 @@ function updateTableColumns() {
   cols.push(
     { w: 17, label: "标题" }, { w: 20, label: "内容" }, { w: 7, label: "优先级" },
     { w: 9, label: "状态" }, { w: 8, label: "进度" }, { w: 10, label: "计划开始" },
-    { w: 10, label: "计划结束" }, { w: 5, label: "工时(h)" }, { w: 5, label: "提出人" });
+    { w: 10, label: "计划结束" });
+  if (isDoneTab) cols.push({ w: 10, label: "完成日期" });
+  cols.push({ w: 5, label: "工时(h)" }, { w: 5, label: "提出人" });
   state.colCount = cols.length;
   $("colgroup").innerHTML = cols.map((c) => '<col style="width:' + c.w + '%">').join("");
   $("thead").innerHTML = "<tr>" + cols.map((c) => "<th>" + c.label + "</th>").join("") + "</tr>";
@@ -809,6 +817,8 @@ function switchTab(type) {
 
   // 更新表格列（待审核TAB添加类型列）
   updateTableColumns();
+  state.tasks = [];
+  render();
 
   if (state.editingId === null) {
     $("formOverlay").classList.remove("open");

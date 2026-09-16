@@ -18,6 +18,7 @@ agent 可用 `sqlite3` 直查直写,也可走 HTTP API。
   - `维护`:只接缺陷修复与已排任务,不排新需求(当前:质量看板系统)
   - `归档`:冻结,禁止新增任务(当前:制度发布审批管控)
   - 改动项目分层:`PUT /api/projects/{name}`,body `{"mode":"维护"}`。
+- **projects.work_stats** 控制项目是否计入日报、周报等工作统计:新项目默认 `1`(是),私人事项、工具维护和报告成品项目设为 `0`(否);该配置不影响项目生命周期和任务流转。
 - 网页「全部项目」视图默认隐藏 维护/归档 项目的 已完成/已取消 任务(降噪),选中具体项目可见全部。
 
 ## 二、建表语句全文
@@ -27,6 +28,8 @@ CREATE TABLE IF NOT EXISTS projects (
   name       TEXT PRIMARY KEY,
   mode       TEXT NOT NULL DEFAULT '活跃'
              CHECK(mode IN ('活跃','维护','归档')),
+  work_stats INTEGER NOT NULL DEFAULT 1
+             CHECK(work_stats IN (0,1)), -- 是否计入工作统计
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE TABLE IF NOT EXISTS tasks (
@@ -79,7 +82,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 | GET/PUT/DELETE `/api/tasks/{id}` | 单条;GET/DELETE 用 `?project=`,PUT 用 body 字段 `project` 寻址、可带 `move_project` 换项目(响应含最终 project/id) |
 | POST `/api/tasks/{id}/close` | 关单→待审核,body 必含 `project`、`test_notes` |
 | POST `/api/tasks/{id}/review` | 审核,body 必含 `project`、`action=approve/reject` |
-| GET/POST `/api/projects`、PUT `/api/projects/{name}` | 项目登记与分层管理 |
+| GET/POST `/api/projects`、PUT `/api/projects/{name}` | 项目登记、分层及 `work_stats` 工作统计配置 |
 | POST `/api/export` | 重新生成 snapshot.json |
 
 ## 五、项目接入与迁移记录

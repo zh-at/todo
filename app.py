@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS projects (
   name       TEXT PRIMARY KEY,
   mode       TEXT NOT NULL DEFAULT '活跃'
              CHECK(mode IN ('活跃','维护','归档')),
+  work_stats INTEGER NOT NULL DEFAULT 1
+             CHECK(work_stats IN (0,1)),
   created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE TABLE IF NOT EXISTS tasks (
@@ -365,12 +367,19 @@ def review_task(project: str, task_id: int, data: dict) -> tuple[dict, str | Non
 
 def list_projects() -> list[dict]:
     return query("""
-        SELECT p.name, p.mode, p.created_at,
+        SELECT p.name, p.mode, p.work_stats, p.created_at,
           (SELECT COUNT(*) FROM tasks t WHERE t.project=p.name
              AND t.status NOT IN ('已完成','已取消')) AS open_count,
           (SELECT COUNT(*) FROM tasks t WHERE t.project=p.name) AS total_count
         FROM projects p
     """ + PROJECT_ORDER_SQL)
+
+
+def parse_work_stats(data: dict, default: int | None = None) -> tuple[int | None, str | None]:
+    value = data.get("work_stats", default)
+    if value not in (0, 1, False, True):
+        return None, "work_stats 只能是 true 或 false"
+    return int(value), None
 
 
 def create_project(data: dict) -> tuple[dict, str | None]:
@@ -381,20 +390,29 @@ def create_project(data: dict) -> tuple[dict, str | None]:
     mode = data.get("mode", "活跃")
     if mode not in MODES:
         return {}, f"mode 只能是:{'/'.join(MODES)}"
+    work_stats, err = parse_work_stats(data, 1)
+    if err:
+        return {}, err
     if query("SELECT 1 FROM projects WHERE name=?", (name,)):
         return {}, f"项目「{name}」已存在"
-    execute("INSERT INTO projects (name, mode) VALUES (?, ?)", (name, mode))
-    return {"name": name, "mode": mode}, None
+    execute("INSERT INTO projects (name, mode, work_stats) VALUES (?, ?, ?)",
+            (name, mode, work_stats))
+    return {"name": name, "mode": mode, "work_stats": work_stats}, None
 
 
 def update_project(name: str, data: dict) -> tuple[dict, str | None]:
-    mode = data.get("mode")
+    rows = query("SELECT mode, work_stats FROM projects WHERE name=?", (name,))
+    if not rows:
+        return {}, f"项目「{name}」不存在"
+    mode = data.get("mode", rows[0]["mode"])
     if mode not in MODES:
         return {}, f"mode 只能是:{'/'.join(MODES)}"
-    if not query("SELECT 1 FROM projects WHERE name=?", (name,)):
-        return {}, f"项目「{name}」不存在"
-    execute("UPDATE projects SET mode=? WHERE name=?", (mode, name))
-    return {"name": name, "mode": mode}, None
+    work_stats, err = parse_work_stats(data, rows[0]["work_stats"])
+    if err:
+        return {}, err
+    execute("UPDATE projects SET mode=?, work_stats=? WHERE name=?",
+            (mode, work_stats, name))
+    return {"name": name, "mode": mode, "work_stats": work_stats}, None
 
 
 def write_snapshot() -> dict:
@@ -541,6 +559,12 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> None:
     with closing(sqlite3.connect(DB_PATH)) as conn:
         conn.executescript(SCHEMA)
+        project_columns = {row[1] for row in conn.execute("PRAGMA table_info(projects)")}
+        if "work_stats" not in project_columns:
+            conn.execute(
+                "ALTER TABLE projects ADD COLUMN work_stats INTEGER NOT NULL DEFAULT 1 "
+                "CHECK(work_stats IN (0,1))"
+            )
         conn.commit()
     if "--export" in sys.argv[1:]:
         snap = write_snapshot()

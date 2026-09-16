@@ -110,8 +110,10 @@
   .proj-list select { font-size: 12px; padding: 2px 6px; }
   .proj-list .cnt { color: var(--muted); font-size: 12px; }
   .proj-note { padding: 0 14px 8px; font-size: 12px; color: var(--muted); }
-  .proj-add { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); }
-  .proj-add input { flex: 1; }
+  .proj-add { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); }
+  .proj-add input[type="text"] { flex: 1; }
+  .proj-add .stats-check { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--muted); }
+  .proj-add .stats-check input { margin: 0; padding: 0; }
 </style>
 </head>
 <body>
@@ -243,17 +245,21 @@
     <div class="proj-list">
       <table>
         <thead>
-          <tr><th>项目</th><th>模式</th><th>任务量</th></tr>
+          <tr><th>项目</th><th>模式</th><th>计入工作统计</th><th>任务量</th></tr>
         </thead>
-        <tbody id="projRowsBody"><tr><td colspan="3" class="empty">加载中…</td></tr></tbody>
+        <tbody id="projRowsBody"><tr><td colspan="4" class="empty">加载中…</td></tr></tbody>
       </table>
     </div>
-    <div class="proj-note">归档项目禁止新增任务;「全部项目」视图默认隐藏维护/归档项目的已完结任务。</div>
+    <div class="proj-note">归档项目禁止新增任务;「全部项目」视图默认隐藏维护/归档项目的已完结任务；关闭“计入工作统计”后，日报周报不汇总该项目。</div>
     <div class="proj-add">
       <input id="newProjName" type="text" placeholder="新项目名(建议与 workspace 目录同名)">
       <select id="newProjMode">
         <option>活跃</option><option>维护</option><option>归档</option>
       </select>
+      <label class="stats-check" title="计入日报、周报等工作统计">
+        <input id="newProjWorkStats" type="checkbox" checked>
+        计入统计
+      </label>
       <button id="btnProjAdd" class="primary" type="button">添加项目</button>
     </div>
   </div>
@@ -743,14 +749,17 @@ function renderProjectList() {
   const rows = state.projects.map((p) => {
     const opts = ["活跃", "维护", "归档"].map((m) =>
       "<option" + (p.mode === m ? " selected" : "") + ">" + m + "</option>").join("");
+    const statsOpts = [[1, "是"], [0, "否"]].map(([value, label]) =>
+      '<option value="' + value + '"' + (Number(p.work_stats) === value ? " selected" : "") + ">" + label + "</option>").join("");
     return "<tr>"
       + "<td>" + esc(p.name) + "</td>"
       + '<td><select class="proj-mode" data-proj="' + esc(p.name) + '">' + opts + "</select></td>"
+      + '<td><select class="proj-work-stats" data-proj="' + esc(p.name) + '">' + statsOpts + "</select></td>"
       + '<td class="cnt">待办 ' + (p.open_count ?? "—") + " / 共 " + (p.total_count ?? "—") + "</td>"
       + "</tr>";
   }).join("");
   $("projRowsBody").innerHTML =
-    rows || '<tr><td colspan="3" class="empty">暂无项目,先在下方添加</td></tr>';
+    rows || '<tr><td colspan="4" class="empty">暂无项目,先在下方添加</td></tr>';
 }
 
 /* 模式变更后同步:项目下拉文案 + 任务降噪 + 列表计数 */
@@ -764,12 +773,15 @@ async function syncAfterProjectChange() {
 $("btnProjects").onclick = openProjects;
 $("btnProjClose").onclick = () => $("projOverlay").classList.remove("open");
 $("projRowsBody").addEventListener("change", async (e) => {
-  const sel = e.target.closest("select.proj-mode");
+  const sel = e.target.closest("select.proj-mode, select.proj-work-stats");
   if (!sel) return;
+  const body = sel.classList.contains("proj-mode")
+    ? { mode: sel.value }
+    : { work_stats: Number(sel.value) };
   try {
     await api("/api/projects/" + encodeURIComponent(sel.dataset.proj), {
       method: "PUT",
-      body: JSON.stringify({ mode: sel.value }),
+      body: JSON.stringify(body),
     });
     await syncAfterProjectChange();
   } catch (err) {
@@ -783,7 +795,11 @@ $("btnProjAdd").onclick = async () => {
   try {
     await api("/api/projects", {
       method: "POST",
-      body: JSON.stringify({ name: name, mode: $("newProjMode").value }),
+      body: JSON.stringify({
+        name: name,
+        mode: $("newProjMode").value,
+        work_stats: $("newProjWorkStats").checked ? 1 : 0,
+      }),
     });
     $("newProjName").value = "";
     await syncAfterProjectChange();

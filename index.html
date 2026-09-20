@@ -216,15 +216,15 @@
       <label>实际开始</label>
       <input id="fStart" type="text" disabled placeholder="状态推进为「进行中」时自动记录">
       <label>实际结束</label>
-      <input id="fEnd" type="text" disabled placeholder="关单时自动记录">
+      <input id="fEnd" type="text" disabled placeholder="提交审核时自动记录">
       <label>验证说明</label>
-      <textarea id="fTestNotes" placeholder="关单时填写,可回看/修改"></textarea>
+      <textarea id="fTestNotes" placeholder="提交审核时填写,可回看/修改"></textarea>
       <label>审核结果</label>
       <textarea id="fReviewNotes" placeholder="审核通过/打回时填写" disabled></textarea>
     </div>
     <div class="foot">
       <button id="btnStartTask" class="start" type="button" style="margin-right:auto">启动</button>
-      <button id="btnCloseTask" class="danger" type="button" style="margin-right:auto">关单…</button>
+      <button id="btnSubmitReviewTask" class="primary" type="button" style="margin-right:auto">提交审核</button>
       <button id="btnApproveTask" class="start" type="button">通过</button>
       <button id="btnRejectTask" class="danger" type="button">打回</button>
       <button id="btnFormCancel" type="button">取消</button>
@@ -265,19 +265,19 @@
   </div>
 </div>
 
-<!-- 关单弹窗 -->
-<div id="closeOverlay" class="overlay">
+<!-- 提交审核弹窗 -->
+<div id="submitReviewOverlay" class="overlay">
   <div class="modal">
-    <h2>关单(进入待审核):<span id="closeTaskTitle"></span></h2>
+    <h2>提交审核:<span id="submitReviewTaskTitle"></span></h2>
     <div class="body">
       <label class="req">验证说明</label>
-      <textarea id="closeNotes" placeholder="验证方式与结果(必填)"></textarea>
+      <textarea id="submitReviewNotes" placeholder="验证方式与结果(必填)"></textarea>
       <label>实际工时</label>
-      <input id="closeHours" type="number" step="0.1" min="0">
+      <input id="submitReviewHours" type="number" step="0.1" min="0">
     </div>
     <div class="foot">
-      <button id="btnCloseCancel" type="button">取消</button>
-      <button id="btnCloseSave" class="primary" type="button">确认完成</button>
+      <button id="btnSubmitReviewCancel" type="button">取消</button>
+      <button id="btnSubmitReviewSave" class="primary" type="button">确认提交</button>
     </div>
   </div>
 </div>
@@ -581,7 +581,7 @@ function updateTableColumns() {
 }
 
 /* ---- 弹窗:新建 / 编辑 ---- */
-/* 状态下拉:「已完成」只在编辑已完成的任务时出现,完成动作必须走关单弹窗 */
+/* 状态下拉:「已完成」只在编辑已完成的任务时出现,提审动作必须走提交审核弹窗 */
 function fillStatusOptions(current) {
   const opts = ["未开始", "进行中"];
   if (current === "已完成") opts.push("已完成");
@@ -617,7 +617,7 @@ function openCreate() {
   $("fDue").value = ""; $("fEst").value = "0"; $("fPlanStart").value = "";
   $("fStart").value = ""; $("fEnd").value = ""; $("fActual").value = "0";
   $("fCreatedLabel").style.display = "none"; $("fCreated").style.display = "none"; $("fCreated").value = "";
-  $("btnCloseTask").style.display = "none";
+  $("btnSubmitReviewTask").style.display = "none";
   $("btnStartTask").style.display = "none";
   $("btnApproveTask").style.display = "none";
   $("btnRejectTask").style.display = "none";
@@ -653,8 +653,8 @@ function openEdit(task) {
   $("fEnd").value = toLocal(task.end_time);
   $("fActual").value = task.actual_hours || 0;
   $("fReviewNotes").value = task.review_notes || "";
-  /* 关单只属于「进行中」;未开始显示「启动」;删除对已有单始终可用 */
-  $("btnCloseTask").style.display = task.status === "进行中" ? "" : "none";
+  /* 提交审核只属于「进行中」;未开始显示「启动」;删除对已有单始终可用 */
+  $("btnSubmitReviewTask").style.display = task.status === "进行中" ? "" : "none";
   $("btnStartTask").style.display = task.status === "未开始" ? "" : "none";
   $("btnApproveTask").style.display = task.status === "待审核" ? "" : "none";
   $("btnRejectTask").style.display = task.status === "待审核" ? "" : "none";
@@ -706,31 +706,31 @@ async function saveForm() {
   } catch (err) { alert(err.message); }
 }
 
-/* ---- 弹窗:关单 ---- */
-let closingTask = null;
+/* ---- 弹窗:提交审核 ---- */
+let submittingTask = null;
 
-function openClose(task) {
-  closingTask = task;
-  $("closeTaskTitle").textContent = task.project + " #" + task.id + " " + task.title;
-  $("closeNotes").value = "";
+function openSubmitReview(task) {
+  submittingTask = task;
+  $("submitReviewTaskTitle").textContent = task.project + " #" + task.id + " " + task.title;
+  $("submitReviewNotes").value = "";
   let suggested = "";
   if (task.start_time) {
     const startMs = Date.parse(task.start_time.replace(" ", "T"));
     suggested = (Math.round((Date.now() - startMs) / 360000) / 10).toFixed(1);
   }
-  $("closeHours").value = suggested;
+  $("submitReviewHours").value = suggested;
   $("formOverlay").classList.remove("open");
-  $("closeOverlay").classList.add("open");
+  $("submitReviewOverlay").classList.add("open");
 }
 
-async function submitClose() {
-  const notes = $("closeNotes").value.trim();
+async function submitForReview() {
+  const notes = $("submitReviewNotes").value.trim();
   if (!notes) { alert("验证说明必填,不能为空"); return; }
-  const body = { project: closingTask.project, test_notes: notes };
-  if ($("closeHours").value !== "") body.actual_hours = Number($("closeHours").value);
+  const body = { project: submittingTask.project, test_notes: notes };
+  if ($("submitReviewHours").value !== "") body.actual_hours = Number($("submitReviewHours").value);
   try {
-    await api("/api/tasks/" + closingTask.id + "/close", { method: "POST", body: JSON.stringify(body) });
-    $("closeOverlay").classList.remove("open");
+    await api("/api/tasks/" + submittingTask.id + "/submit-review", { method: "POST", body: JSON.stringify(body) });
+    $("submitReviewOverlay").classList.remove("open");
     refresh();
   } catch (err) { alert(err.message); }
 }
@@ -860,9 +860,9 @@ $("rows").onclick = (e) => {
 $("btnFormCancel").onclick = () => $("formOverlay").classList.remove("open");
 $("btnFormClose").onclick = () => $("formOverlay").classList.remove("open");
 $("btnFormSave").onclick = saveForm;
-$("btnCloseTask").onclick = () => {
+$("btnSubmitReviewTask").onclick = () => {
   const task = state.tasks.find((t) => t.id === state.editingId && t.project === state.editingProject);
-  if (task) openClose(task);
+  if (task) openSubmitReview(task);
 };
 $("btnStartTask").onclick = async () => {
   if (state.editingId === null) return;
@@ -928,13 +928,13 @@ $("btnReviewCancel").onclick = () => $("reviewOverlay").classList.remove("open")
 $("btnReviewApprove").onclick = () => submitReview("approve");
 $("btnReviewReject").onclick = () => submitReview("reject");
 
-$("btnCloseCancel").onclick = () => $("closeOverlay").classList.remove("open");
-$("btnCloseSave").onclick = submitClose;
+$("btnSubmitReviewCancel").onclick = () => $("submitReviewOverlay").classList.remove("open");
+$("btnSubmitReviewSave").onclick = submitForReview;
 
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   $("formOverlay").classList.remove("open");
-  $("closeOverlay").classList.remove("open");
+  $("submitReviewOverlay").classList.remove("open");
   $("reviewOverlay").classList.remove("open");
   $("projOverlay").classList.remove("open");
 });

@@ -65,10 +65,10 @@ CREATE TABLE IF NOT EXISTS tasks (
 - 新建任务自己取号:`SELECT COALESCE(MAX(id),0)+1 FROM tasks WHERE project='…'`;
   或走 API `POST /api/tasks`(body 必含 `project`)由服务端取号。
 - **完成只置「待审核」,不直接置「已完成」**,由人工审核通过;打回则回「进行中」。
-- Agent 关单应优先调用 `POST /api/tasks/{id}/close`,不要用通用 PUT 只改状态。
+- Agent 提交审核应调用 `POST /api/tasks/{id}/submit-review`,不要用通用 PUT 只改状态。
 - 状态机自动字段(直写 sqlite 时除 `end_time` 有触发器兜底外,其余字段需自行维护):
   - 进「进行中」→ 补 `start_time`;
-  - 关单(→待审核)→ 自动补 `end_time`;走 `/close` 时还会置 `progress=100`、校验 `test_notes` 必填并计算 `actual_hours`;
+  - 提交审核(→待审核)→ 自动补 `end_time`;走 `/submit-review` 时还会置 `progress=100`、校验 `test_notes` 必填并计算 `actual_hours`;
   - 审核通过(→已完成)→ `review_notes` 记录结果;
   - 审核打回(→进行中)→ 清 `end_time`,`review_notes` 记录原因。
 - 直查直写后若停服兜底要看最新数据,可 `python3 app.py --export` 刷新 snapshot.json。
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 | GET `/api/tasks?project=&type=&status=&priority=&q=` | 列表,各筛选可选 |
 | POST `/api/tasks` | 新建,body 必含 `project`(归档项目拒绝) |
 | GET/PUT/DELETE `/api/tasks/{id}` | 单条;GET/DELETE 用 `?project=`,PUT 用 body 字段 `project` 寻址、可带 `move_project` 换项目(响应含最终 project/id) |
-| POST `/api/tasks/{id}/close` | 关单→待审核,body 必含 `project`、`test_notes` |
+| POST `/api/tasks/{id}/submit-review` | 提交审核→待审核,body 必含 `project`、`test_notes`,任务状态必须为「进行中」 |
 | POST `/api/tasks/{id}/review` | 审核,body 必含 `project`、`action=approve/reject` |
 | GET/POST `/api/projects`、PUT `/api/projects/{name}` | 项目登记、分层及 `work_stats` 工作统计配置 |
 | POST `/api/export` | 重新生成 snapshot.json |

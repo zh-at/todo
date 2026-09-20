@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS tasks (
                CHECK(priority IN ('必须做','应该做','可不做')),
   progress     INTEGER NOT NULL DEFAULT 0 CHECK(progress BETWEEN 0 AND 100),
   start_time   TEXT,              -- 'YYYY-MM-DD HH:MM:SS',进入"进行中"时自动补(实际值,只读)
-  end_time     TEXT,              -- 关单进入"待审核"时自动补(实际值,只读)
+  end_time     TEXT,              -- 提交审核进入"待审核"时自动补(实际值,只读)
   plan_start   TEXT,              -- 'YYYY-MM-DD',计划开始(排期预期值)
   due_date     TEXT,              -- 'YYYY-MM-DD',计划结束/DDL(排期预期值)
   est_hours    REAL NOT NULL DEFAULT 0,
@@ -306,13 +306,15 @@ def update_task(project: str, task_id: int, data: dict) -> tuple[dict, str | Non
     return {"ok": True, "project": new_project, "id": new_id}, None
 
 
-def close_task(project: str, task_id: int, data: dict) -> tuple[dict, str | None]:
+def submit_task_for_review(project: str, task_id: int, data: dict) -> tuple[dict, str | None]:
     notes = data.get("test_notes")
     if not isinstance(notes, str) or not notes.strip():
         return {}, "test_notes 必填且不能为空"
     task = fetch_task(project, task_id)
     if not task:
         return {}, "任务不存在"
+    if task["status"] != "进行中":
+        return {}, "仅「进行中」状态可提交审核"
     end = now_str()
     if data.get("actual_hours") is not None:
         hours_val = data["actual_hours"]
@@ -491,13 +493,13 @@ class Handler(BaseHTTPRequestHandler):
             snap = write_snapshot()
             self._send_json(200, {"ok": True, "count": len(snap["tasks"])})
         else:
-            m = re.fullmatch(r"/api/tasks/(\d+)/close", url.path)
+            m = re.fullmatch(r"/api/tasks/(\d+)/submit-review", url.path)
             if m:
                 project, err = require_project(data)
                 if err:
                     self._error(400, err)
                     return
-                result, err = close_task(project, int(m.group(1)), data)
+                result, err = submit_task_for_review(project, int(m.group(1)), data)
                 self._error(400, err) if err else self._send_json(200, result)
                 return
             m = re.fullmatch(r"/api/tasks/(\d+)/review", url.path)
